@@ -49,6 +49,7 @@ var (
 	verbose          bool
 	jsonOutput       bool
 	widthFlag        int
+	excludeAuthors   []string
 )
 
 var rootCmd = &cobra.Command{
@@ -93,6 +94,12 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		slog.Info("fetched review data", "threads", len(data.Threads), "pr_comments", len(data.PRComments))
+
+		// Filter out excluded authors.
+		data = review.FilterByExcludedAuthors(data, excludeAuthors)
+		if len(excludeAuthors) > 0 {
+			slog.Info("filtered by excluded authors", "exclude_authors", excludeAuthors, "threads", len(data.Threads), "pr_comments", len(data.PRComments))
+		}
 
 		// Create Copilot classifier.
 		s.Suffix = " Starting Copilot..."
@@ -208,6 +215,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&verbose, "verbose", false, "Verbose output")
 	rootCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output results as JSON")
 	rootCmd.Flags().IntVarP(&widthFlag, "width", "w", 0, "Output width (0 for auto-detect)")
+	rootCmd.Flags().StringArrayVar(&excludeAuthors, "exclude-author", nil, "Exclude comments by author login (can be specified multiple times)")
 
 	_ = rootCmd.RegisterFlagCompletionFunc("copilot-model", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		models, err := review.ListCopilotModels(rootCmd.Context())

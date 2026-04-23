@@ -346,3 +346,116 @@ func TestBuildClassifyInput(t *testing.T) {
 		t.Errorf("expected PR comment ID PC1, got %s", input.PRComments[0].ID)
 	}
 }
+
+func TestFilterByExcludedAuthors(t *testing.T) {
+	now := time.Now()
+	data := &Data{
+		Threads: []Thread{
+			{
+				ID:   "T1",
+				Path: "main.go",
+				Comments: []Comment{
+					{ID: "C1", Body: "Fix this", Author: "alice", CreatedAt: now},
+					{ID: "C2", Body: "Done", Author: "bob", CreatedAt: now},
+				},
+			},
+			{
+				ID:   "T2",
+				Path: "plan.tf",
+				Comments: []Comment{
+					{ID: "C3", Body: "terraform plan output...", Author: "atlantis-bot", CreatedAt: now},
+				},
+			},
+			{
+				ID:   "T3",
+				Path: "util.go",
+				Comments: []Comment{
+					{ID: "C4", Body: "Looks good", Author: "carol", CreatedAt: now},
+				},
+			},
+		},
+		PRComments: []Comment{
+			{ID: "PC1", Body: "Overall feedback", Author: "alice", CreatedAt: now},
+			{ID: "PC2", Body: "Plan: ...", Author: "atlantis-bot", CreatedAt: now},
+			{ID: "PC3", Body: "LGTM", Author: "bob", CreatedAt: now},
+		},
+	}
+
+	tests := []struct {
+		name            string
+		excludeAuthors  []string
+		wantThreads     int
+		wantPRComments  int
+		wantThreadIDs   []string
+		wantCommentIDs  []string
+	}{
+		{
+			name:           "no exclusions",
+			excludeAuthors: nil,
+			wantThreads:    3,
+			wantPRComments: 3,
+		},
+		{
+			name:           "empty exclusions",
+			excludeAuthors: []string{},
+			wantThreads:    3,
+			wantPRComments: 3,
+		},
+		{
+			name:           "exclude bot",
+			excludeAuthors: []string{"atlantis-bot"},
+			wantThreads:    2,
+			wantPRComments: 2,
+			wantThreadIDs:  []string{"T1", "T3"},
+			wantCommentIDs: []string{"PC1", "PC3"},
+		},
+		{
+			name:           "exclude multiple authors",
+			excludeAuthors: []string{"atlantis-bot", "alice"},
+			wantThreads:    1,
+			wantPRComments: 1,
+			wantThreadIDs:  []string{"T3"},
+			wantCommentIDs: []string{"PC3"},
+		},
+		{
+			name:           "exclude nonexistent author",
+			excludeAuthors: []string{"nonexistent"},
+			wantThreads:    3,
+			wantPRComments: 3,
+		},
+		{
+			name:           "case insensitive match",
+			excludeAuthors: []string{"Alice", "ATLANTIS-BOT"},
+			wantThreads:    1,
+			wantPRComments: 1,
+			wantThreadIDs:  []string{"T3"},
+			wantCommentIDs: []string{"PC3"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filtered := FilterByExcludedAuthors(data, tt.excludeAuthors)
+			if len(filtered.Threads) != tt.wantThreads {
+				t.Errorf("expected %d threads, got %d", tt.wantThreads, len(filtered.Threads))
+			}
+			if len(filtered.PRComments) != tt.wantPRComments {
+				t.Errorf("expected %d PR comments, got %d", tt.wantPRComments, len(filtered.PRComments))
+			}
+			if tt.wantThreadIDs != nil {
+				for i, id := range tt.wantThreadIDs {
+					if filtered.Threads[i].ID != id {
+						t.Errorf("expected thread[%d].ID = %s, got %s", i, id, filtered.Threads[i].ID)
+					}
+				}
+			}
+			if tt.wantCommentIDs != nil {
+				for i, id := range tt.wantCommentIDs {
+					if filtered.PRComments[i].ID != id {
+						t.Errorf("expected PRComment[%d].ID = %s, got %s", i, id, filtered.PRComments[i].ID)
+					}
+				}
+			}
+		})
+	}
+}

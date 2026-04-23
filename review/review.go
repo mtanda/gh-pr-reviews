@@ -3,6 +3,7 @@ package review
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -117,6 +118,35 @@ type UnresolvedComment struct {
 	Resolved  bool           `json:"resolved"`
 	Reason    string         `json:"reason"`
 	Replies   []ReplyComment `json:"replies,omitempty"`
+}
+
+// FilterByExcludedAuthors removes threads and PR comments authored by any of the excluded authors.
+// For threads, the first comment's author determines the thread's author.
+func FilterByExcludedAuthors(data *Data, excludeAuthors []string) *Data {
+	if len(excludeAuthors) == 0 {
+		return data
+	}
+
+	excluded := make(map[string]bool, len(excludeAuthors))
+	for _, a := range excludeAuthors {
+		excluded[strings.ToLower(a)] = true
+	}
+
+	filtered := &Data{}
+	for _, t := range data.Threads {
+		if len(t.Comments) > 0 && excluded[strings.ToLower(t.Comments[0].Author)] {
+			continue
+		}
+		filtered.Threads = append(filtered.Threads, t)
+	}
+	for _, c := range data.PRComments {
+		if excluded[strings.ToLower(c.Author)] {
+			continue
+		}
+		filtered.PRComments = append(filtered.PRComments, c)
+	}
+
+	return filtered
 }
 
 // Analyze classifies and filters review comments, returning unresolved ones (or all if showAll is true).
